@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PC2 - Cliente Criptográfico</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/forge/1.3.1/forge.min.js"></script>
+    <style>
+        :root {
+            --primary: #4F46E5;
+            --primary-hover: #4338CA;
+            --bg: #F3F4F6;
+            --surface: #FFFFFF;
+            --text: #1F2937;
+            --text-light: #6B7280;
+            --success: #10B981;
+        }
+
+        body {
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .container {
+            background-color: var(--surface);
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
+            width: 100%;
+            max-width: 600px; /* Aumentei um pouco a largura para os logs */
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, var(--primary), #818CF8);
+            color: white;
+            padding: 24px;
+            text-align: center;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 1.5rem;
+        }
+
+        .header p {
+            margin: 8px 0 0 0;
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+
+        .content {
+            padding: 24px;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            background-color: #FEE2E2;
+            color: #EF4444;
+            margin-bottom: 20px;
+            transition: all 0.3s ease;
+        }
+
+        .status-badge.connected {
+            background-color: #D1FAE5;
+            color: var(--success);
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #D1D5DB;
+            border-radius: 8px;
+            font-family: inherit;
+            font-size: 1rem;
+            resize: vertical;
+            min-height: 100px;
+            box-sizing: border-box;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+        }
+
+        button {
+            width: 100%;
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 14px;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            background-color: var(--primary-hover);
+        }
+
+        button:disabled {
+            background-color: #9CA3AF;
+            cursor: not-allowed;
+        }
+
+        .log-area {
+            margin-top: 24px;
+            background-color: #111827;
+            color: #10B981;
+            padding: 16px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 0.85rem;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            max-height: 350px; /* Aumentado para caber a chave RSA confortavelmente */
+            overflow-y: auto;
+            display: none;
+            border: 1px solid #374151;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div class="header">
+            <h1>Comunicação Segura</h1>
+            <p>Simulação PC2 ➔ PC1</p>
+        </div>
+        
+        <div class="content">
+            <div id="status" class="status-badge">Aguardando Chave Pública...</div>
+
+            <div class="form-group">
+                <label for="mensagem">Mensagem para o PC1:</label>
+                <textarea id="mensagem" placeholder="Digite sua mensagem secreta aqui..."></textarea>
+            </div>
+
+            <button id="btnEnviar" disabled onclick="enviarMensagem()">Criptografar e Enviar</button>
+
+            <div id="logArea" class="log-area"></div>
+        </div>
+    </div>
+
+    <script>
+        const BACKEND_URL = 'http://localhost:3000';
+        let chavePublicaPem = null;
+
+        function adicionarLog(texto) {
+            const logArea = document.getElementById('logArea');
+            logArea.style.display = 'block';
+            logArea.innerHTML += texto + '\n\n';
+            // Desce a barra de rolagem automaticamente para a última linha
+            logArea.scrollTop = logArea.scrollHeight; 
+        }
+
+        // 1. Busca a chave pública no backend (PC1)
+        async function buscarChavePublica() {
+            try {
+                const resposta = await fetch(`${BACKEND_URL}/chave-publica`);
+                const dados = await resposta.json();
+                
+                chavePublicaPem = dados.publicKey;
+                
+                const statusEl = document.getElementById('status');
+                statusEl.textContent = '✓ Conectado & Chave Pública Recebida';
+                statusEl.classList.add('connected');
+                document.getElementById('btnEnviar').disabled = false;
+
+                // Mostra a chave pública COMPLETA no console visual da página
+                adicionarLog("🔑 [PASSO 1] Chave Pública recebida do PC1:\n" + chavePublicaPem);
+                
+            } catch (erro) {
+                console.error("Erro ao buscar chave:", erro);
+                document.getElementById('status').textContent = 'Erro ao conectar com PC1';
+                adicionarLog("[ERRO] Não foi possível conectar ao backend. O servidor do PC1 está rodando?");
+            }
+        }
+
+        // 2. Criptografa e envia a mensagem para o PC1
+        async function enviarMensagem() {
+            const textoMensagem = document.getElementById('mensagem').value;
+            
+            if (!textoMensagem) {
+                alert("Por favor, digite uma mensagem.");
+                return;
+            }
+
+            try {
+                // Inicia o processo com o Forge
+                const publicKey = forge.pki.publicKeyFromPem(chavePublicaPem);
+                const mensagemBytes = forge.util.encodeUtf8(textoMensagem);
+                
+                const encrypted = publicKey.encrypt(mensagemBytes, 'RSA-OAEP', {
+                    md: forge.md.sha256.create(),
+                    mgf1: { md: forge.md.sha256.create() }
+                });
+
+                const mensagemBase64 = forge.util.encode64(encrypted);
+                
+                // Mostra o texto original e o cifrado COMPLETO no console visual da página
+                adicionarLog("🔒 [PASSO 2] Mensagem Original:\n" + textoMensagem);
+                adicionarLog("🔒 [PASSO 3] Texto Criptografado (Pronto para envio):\n" + mensagemBase64);
+                adicionarLog("📡 [REDE] Enviando dados cifrados para o PC1...");
+
+                // Envia para o backend
+                const resposta = await fetch(`${BACKEND_URL}/mensagem`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mensagemCriptografada: mensagemBase64 })
+                });
+
+                const resultado = await resposta.json();
+
+                if (resultado.sucesso) {
+                    adicionarLog(`✅ [SUCESSO] Resposta do PC1: ${resultado.mensagem}`);
+                    document.getElementById('mensagem').value = ''; 
+                } else {
+                    adicionarLog(`❌ [ERRO] PC1 retornou: ${resultado.erro}`);
+                }
+
+            } catch (erro) {
+                console.error("Erro no processo:", erro);
+                adicionarLog(`❌ [ERRO INTERNO] Falha ao processar a mensagem: ${erro.message}`);
+            }
+        }
+
+        // Inicia a busca pela chave assim que a página carrega
+        buscarChavePublica();
+    </script>
+</body>
+</html>
