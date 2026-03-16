@@ -1,0 +1,13 @@
+{
+  "name": "aula-criptografia-monorepo",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Scripts de deploy Railway para frontend e backend",
+  "scripts": {
+    "railway:backend": "npm --prefix trabalho-cripto-backend install && npm --prefix trabalho-cripto-backend run start",
+    "railway:frontend": "npm --prefix trabalho-cripto-frontend install && npm --prefix trabalho-cripto-frontend run start"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
