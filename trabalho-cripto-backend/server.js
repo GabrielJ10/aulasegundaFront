@@ -112,48 +112,7 @@ const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', {
 });
 console.log("Chaves geradas com sucesso!\n");
 
-function calcularHashSha256(buffer) {
-    return crypto.createHash('sha256').update(buffer).digest('hex');
-}
 
-function assinarComChavePrivada(buffer) {
-    return crypto.sign('sha256', buffer, privateKey).toString('base64');
-}
-
-function descriptografarPacoteHibrido(pacote) {
-    const {
-        chaveSimetricaCriptografada,
-        iv,
-        tag,
-        dadosCriptografados,
-    } = pacote || {};
-
-    if (!chaveSimetricaCriptografada || !iv || !tag || !dadosCriptografados) {
-        throw new Error('Pacote híbrido inválido.');
-    }
-
-    const chaveSimetrica = crypto.privateDecrypt(
-        {
-            key: privateKey,
-            padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
-            oaepHash: 'sha256',
-        },
-        Buffer.from(chaveSimetricaCriptografada, 'base64')
-    );
-
-    const decipher = crypto.createDecipheriv(
-        'aes-256-gcm',
-        chaveSimetrica,
-        Buffer.from(iv, 'base64')
-    );
-
-    decipher.setAuthTag(Buffer.from(tag, 'base64'));
-
-    return Buffer.concat([
-        decipher.update(Buffer.from(dadosCriptografados, 'base64')),
-        decipher.final(),
-    ]);
-}
 
 // 2. ROTA DA CHAVE PÚBLICA (PC2 fará um GET aqui)
 app.get('/chave-publica', (req, res) => {
@@ -198,43 +157,7 @@ app.post('/mensagem', (req, res) => {
     }
 });
 
-// 4. ROTA DE MENSAGEM HIBRIDA (AES para dados + RSA para chave AES)
-app.post('/mensagem-hibrida', (req, res) => {
-    const { pacote } = req.body;
 
-    if (!pacote) {
-        return res.status(400).json({ erro: 'Pacote criptografado não recebido.' });
-    }
-
-    try {
-        console.log('--- Nova Mensagem Híbrida Recebida do PC2 ---');
-        console.log('Chave AES cifrada (base64):', pacote.chaveSimetricaCriptografada);
-        console.log('IV (base64):', pacote.iv);
-        console.log('TAG GCM (base64):', pacote.tag);
-        console.log('Payload cifrado (base64):', pacote.dadosCriptografados);
-
-        const bufferMensagem = descriptografarPacoteHibrido(pacote);
-        const mensagemOriginal = bufferMensagem.toString('utf8');
-        const hashSha256 = calcularHashSha256(bufferMensagem);
-        const assinaturaDigital = assinarComChavePrivada(bufferMensagem);
-
-        console.log('\nMensagem descriptografada com sucesso (híbrida):');
-        console.log(`"${mensagemOriginal}"\n--------------------------------------\n`);
-        console.log(`[INTEGRIDADE] SHA-256 no destino: ${hashSha256}`);
-        console.log(`[ASSINATURA] Assinatura digital gerada (base64 len=${assinaturaDigital.length})`);
-
-        res.json({
-            sucesso: true,
-            mensagem: 'Mensagem híbrida recebida e descriptografada com sucesso!',
-            mensagemOriginal,
-            hashSha256,
-            assinaturaDigital,
-        });
-    } catch (erro) {
-        console.error('Erro ao descriptografar pacote híbrido:', erro.message);
-        res.status(500).json({ erro: 'Falha ao descriptografar a mensagem híbrida.' });
-    }
-});
 
 // Inicia o servidor do PC1
 app.listen(PORT, () => {

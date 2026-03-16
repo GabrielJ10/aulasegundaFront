@@ -1,15 +1,13 @@
 # Trabalho de Criptografia - Proposta 2
 
-Sistema cliente-servidor com criptografia assimetrica e fluxo hibrido para mensagens longas, pronto para deploy em dois servicos separados no Railway (frontend e backend).
+Sistema cliente-servidor com criptografia assimetrica RSA puro, pronto para deploy em dois servicos separados no Railway (frontend e backend).
 
 ## O que este projeto faz
 
 - PC1 (backend) gera par de chaves RSA (publica/privada).
 - PC2 (frontend) busca a chave publica do PC1.
-- PC2 cifra mensagem com AES-256-GCM e cifra a chave AES com RSA-OAEP.
-- PC1 usa chave privada para recuperar a chave AES e descriptografar os dados.
-- PC1 calcula hash SHA-256 e assina digitalmente o conteudo com sua chave privada.
-- PC2 verifica assinatura digital com a chave publica e compara hash origem x destino.
+- PC2 cifra a mensagem com RSA usando a chave publica.
+- PC1 usa chave privada para descriptografar a mensagem.
 - Backend possui rota de visualizacao de logs em `/logs`.
 
 ## Estrutura
@@ -49,7 +47,6 @@ npm run start
 Depois abra:
 
 - `http://localhost:5500`
-- Defina no campo "URL do Backend" a URL do backend (local ou Railway).
 
 ## Deploy no Railway (2 servicos separados)
 
@@ -77,29 +74,27 @@ npm install
 npm run start
 ```
 
-3. Abra a URL publica do frontend e informe, no campo de configuracao, a URL publica do backend.
+3. Abra a URL publica do frontend. No arquivo `trabalho-cripto-frontend/index.html`, altere a variavel `BACKEND_URL` com a URL publica do seu servico backend.
 
 ## O que esperar na demonstracao
 
-### Fluxo 1: Mensagem longa
+### Fluxo: Mensagem RSA
 
-1. Digite uma mensagem grande.
-2. Clique em `Criptografar e Enviar Mensagem`.
+1. Digite uma mensagem.
+2. Clique em `Criptografar e Enviar`.
 3. Veja no log:
    - Conteudo original (origem)
-   - Pacote cifrado (rede)
-   - Conteudo descriptografado (destino)
-   - Hash SHA-256 origem e destino
-   - Verificacao da assinatura digital
+   - Pacote cifrado com RSA (rede - primeiros caracteres)
+   - Resposta do backend (sucesso)
 
 ## Endpoints principais
 
-- `GET /chave-publica`
-- `POST /mensagem-hibrida`
-- `GET /logs`
+- `GET /chave-publica` - Entrega a chave publica RSA
+- `POST /mensagem` - Recebe e descriptografa mensagem com RSA
+- `GET /logs` - Exibe logs do backend em interface web
 
 ## Observacoes
 
-- O fluxo `POST /mensagem` (RSA direto) foi mantido apenas para comparacao didatica.
-- Para dados grandes, use sempre fluxo hibrido (AES + RSA).
+- Criptografia RSA puro com chaves de 2048 bits.
 - A chave privada nao e exibida em logs.
+- Limite pratico: mensagens com tamanho maximo ~245 bytes (limitacao do RSA 2048).

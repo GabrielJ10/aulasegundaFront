@@ -4,14 +4,9 @@
 
 Implementar um sistema cliente-servidor onde:
 
-- PC1 gera chaves publica/privada.
-- PC2 usa a chave publica para proteger informacoes antes do envio.
+- PC1 gera chaves publica/privada RSA.
+- PC2 usa a chave publica para proteger mensagens antes do envio.
 - PC1 usa a chave privada para recuperar o conteudo.
-
-Este projeto implementa isso de duas formas:
-
-- Fluxo base (RSA direto): para entender o conceito.
-- Fluxo recomendado (hibrido): para operar com mensagens longas e arquivos.
 
 ---
 
@@ -78,73 +73,62 @@ Atendido e expandido.
 
 ---
 
-## 4. Por que usar criptografia hibrida
+## 4. Por que RSA é suficiente para este projeto
 
-RSA puro possui limite de tamanho de mensagem. Em RSA 2048 com OAEP-SHA256, a carga util maxima e limitada. Para dados maiores, o padrao de mercado e:
+RSA com chaves de 2048 bits consegue cifrar até ~245 bytes de dados. Para a demonstração de sala, mensagens pequenas e médias são adequadas.
 
-1. Gerar chave AES aleatoria.
-2. Criptografar payload com AES (rapido e sem limite pratico para esse uso).
-3. Criptografar a chave AES com RSA (troca segura da chave).
-
-Essa combinacao resolve o limite do RSA e melhora performance.
+Características:
+1. Conceito claro: 1 chave pública, 1 chave privada.
+2. Fácil de explicar: qualquer um cifra, só o detentor da privada consegue ler.
+3. Sem complexidade extra: sem necessidade de gerenciar chaves simétricas.
 
 ---
 
 ## 5. Fluxo completo demonstrado na tela
 
-## 5.1 Mensagem longa
+### Mensagem RSA
 
 1. Origem (PC2): texto em claro.
-2. Rede: pacote com:
-   - chave AES criptografada em RSA
-   - IV
-   - TAG GCM
-   - dados criptografados em AES
-3. Destino (PC1): texto descriptografado.
-4. Integridade: hash SHA-256 origem e destino.
-5. Autenticidade: assinatura digital verificada no cliente.
+2. Rede: pacote criptografado com RSA.
+3. Destino (PC1): texto descriptografado com chave privada.
+4. Confirmação: mensagem recebida com sucesso.
 
 ## 6. Endpoints e papel de cada um
 
 - `GET /chave-publica`
   - Entrega chave publica RSA para o cliente.
 
-- `POST /mensagem-hibrida`
-  - Recebe pacote hibrido de mensagem.
-  - Descriptografa no servidor.
-  - Retorna conteudo, hash e assinatura.
+- `POST /mensagem`
+  - Recebe mensagem criptografada com RSA.
+  - Descriptografa no servidor com chave privada.
+  - Retorna confirmacao de recebimento.
 
 - `GET /logs`
   - Exibe os logs do backend em interface web.
   - Tambem aceita `?format=json` para retorno em JSON.
 
-- `POST /mensagem`
-  - Fluxo legado de RSA direto (didatico, nao recomendado para dados grandes).
-
 ---
 
-## 7. O que foi melhorado nesta versao
+## 7. O que foi implementado
 
 1. `package.json` corrigido (`main: server.js`, scripts `start/dev`).
-2. URL de backend dinamica no frontend (nao depende de localhost fixo).
-3. Suporte a mensagens longas via criptografia hibrida.
-4. Logs didaticos de origem/rede/destino para apresentacao.
-5. Integridade com SHA-256 exibida no fluxo.
-6. Assinatura digital no backend + verificacao no frontend.
-7. Chave privada removida dos logs (seguranca).
-8. Rota `/logs` para visualizar comunicacao no navegador.
+2. Criptografia RSA puro (2048 bits).
+3. Logs didaticos de origem/rede/destino para apresentacao.
+4. Rota `/logs` para visualizar comunicacao no navegador.
+5. Chave privada nunca e exibida em logs (seguranca).
+6. Interface web simples e clara.
 
 ---
 
 ## 8. Roteiro de apresentacao (fala pronta)
 
 1. "O PC1 gera um par RSA e publica apenas a chave publica."
-2. "O PC2 pega essa chave e cria um pacote hibrido."
-3. "O dado real vai em AES-GCM; a chave AES vai protegida por RSA-OAEP."
-4. "No destino, o PC1 recupera o conteudo com a chave privada."
-5. "Depois ele calcula hash SHA-256 e assina digitalmente o resultado."
-6. "No cliente, eu valido assinatura e comparo hash origem/destino."
-7. "Assim eu demonstro confidencialidade, integridade e autenticidade."
+2. "O PC2 pega essa chave e cifra a mensagem."
+3. "Qualquer um consegue cifrar com a chave publica."
+4. "Mas SÓ PC1 consegue descriptografar com sua chave privada (que ninguém mais tem)."
+5. "Se alguém interceptar a mensagem na rede, vai ver só lixo aleatório."
+6. "PC1 abre com a chave privada e lê a mensagem original."
+7. "Assim eu demonstro confidencialidade total: só o dono da chave privada consegue ler."
 
 ---
 
@@ -170,11 +154,12 @@ npm run start
 
 ## 10. Conclusao
 
-A proposta 2 foi atendida e expandida com praticas de criptografia aplicadas em sistemas reais:
+A proposta 2 foi atendida com criptografia RSA aplicada em um sistema real cliente-servidor:
 
-- troca segura de chave (RSA)
-- criptografia eficiente de dados (AES-GCM)
-- garantia de integridade (SHA-256)
-- garantia de autenticidade (assinatura digital)
+- Geração segura de chaves (RSA 2048)
+- Cifra em lado do cliente (confidencialidade)
+- Descriptografa apenas com chave privada (autenticidade)
+- Interface de logs para visualizar toda a comunicacao
+- Deploy pronto para Railway em 2 serviços separados
 
 Com isso, o projeto fica tecnicamente correto, demonstravel em sala e com narrativa clara de seguranca ponta a ponta.
