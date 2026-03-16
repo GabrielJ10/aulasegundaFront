@@ -200,11 +200,10 @@
     </div>
 
     <script>
-        const BACKEND_URL = 'http://localhost:3000';
+        const BACKEND_URL = '__BACKEND_URL__';
         let chavePublicaPem = null;
 
         function adicionarLog(texto) {
-            +        const BACKEND_URL = '__BACKEND_URL__';
             const logArea = document.getElementById('logArea');
             logArea.style.display = 'block';
             logArea.innerHTML += texto + '\n\n';
