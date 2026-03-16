@@ -1,0 +1,11 @@
+{
+  "name": "trabalho-cripto-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Frontend da comunicacao criptografica para deploy separado no Railway",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  }
+}

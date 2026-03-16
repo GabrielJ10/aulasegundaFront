@@ -34,7 +34,7 @@
             border-radius: 12px;
             box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
             width: 100%;
-            max-width: 600px; /* Aumentei um pouco a largura para os logs */
+            max-width: 760px;
             overflow: hidden;
         }
 
@@ -81,6 +81,18 @@
             margin-bottom: 20px;
         }
 
+        .section {
+            border: 1px solid #E5E7EB;
+            border-radius: 10px;
+            padding: 16px;
+            margin-bottom: 20px;
+        }
+
+        .section h2 {
+            margin: 0 0 12px 0;
+            font-size: 1.05rem;
+        }
+
         label {
             display: block;
             margin-bottom: 8px;
@@ -98,6 +110,15 @@
             resize: vertical;
             min-height: 100px;
             box-sizing: border-box;
+        }
+
+        input[type="file"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #D1D5DB;
+            border-radius: 8px;
+            box-sizing: border-box;
+            background: #fff;
         }
 
         textarea:focus {
@@ -138,10 +159,38 @@
             font-size: 0.85rem;
             white-space: pre-wrap;
             word-wrap: break-word;
-            max-height: 350px; /* Aumentado para caber a chave RSA confortavelmente */
+            max-height: 420px;
             overflow-y: auto;
             display: none;
             border: 1px solid #374151;
+        }
+
+        .hint {
+            color: var(--text-light);
+            font-size: 0.88rem;
+            margin-top: -8px;
+            margin-bottom: 12px;
+        }
+
+        .backend-config {
+            margin-bottom: 20px;
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 10px;
+            align-items: end;
+        }
+
+        .backend-config input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #D1D5DB;
+            border-radius: 8px;
+            box-sizing: border-box;
+        }
+
+        .backend-config button {
+            width: auto;
+            padding: 12px 16px;
         }
     </style>
 </head>
@@ -156,20 +205,35 @@
         <div class="content">
             <div id="status" class="status-badge">Aguardando Chave Pública...</div>
 
-            <div class="form-group">
-                <label for="mensagem">Mensagem para o PC1:</label>
-                <textarea id="mensagem" placeholder="Digite sua mensagem secreta aqui..."></textarea>
+            <div class="backend-config">
+                <div>
+                    <label for="backendUrl">URL do Backend (Railway):</label>
+                    <input id="backendUrl" type="text" placeholder="https://seu-backend.up.railway.app" />
+                </div>
+                <button id="btnSalvarUrl" type="button" onclick="salvarBackendUrl()">Salvar URL</button>
             </div>
 
-            <button id="btnEnviar" disabled onclick="enviarMensagem()">Criptografar e Enviar</button>
+            <div class="section">
+                <h2>Fluxo 1: Mensagem Longa (Criptografia Híbrida)</h2>
+                <div class="form-group">
+                    <label for="mensagem">Mensagem para o PC1:</label>
+                    <textarea id="mensagem" placeholder="Digite uma mensagem grande para testar...\nExemplo: cole alguns parágrafos."></textarea>
+                </div>
+                <button id="btnEnviar" disabled onclick="enviarMensagemHibrida()">Criptografar e Enviar Mensagem</button>
+            </div>
 
             <div id="logArea" class="log-area"></div>
         </div>
     </div>
 
     <script>
-        const BACKEND_URL = 'http://localhost:3000';
+        const hostPadrao = window.location.hostname || 'localhost';
+        const protocoloPadrao = window.location.protocol === 'https:' ? 'https:' : 'http:';
+        const backendPadrao = window.BACKEND_URL || `${protocoloPadrao}//${hostPadrao}:3000`;
+        let BACKEND_URL = localStorage.getItem('backendUrl') || backendPadrao;
+
         let chavePublicaPem = null;
+        let chavePublicaObjeto = null;
 
         function adicionarLog(texto) {
             const logArea = document.getElementById('logArea');
@@ -179,6 +243,83 @@
             logArea.scrollTop = logArea.scrollHeight; 
         }
 
+        function salvarBackendUrl() {
+            const input = document.getElementById('backendUrl');
+            const url = (input.value || '').trim().replace(/\/$/, '');
+
+            if (!url) {
+                alert('Informe uma URL válida do backend.');
+                return;
+            }
+
+            BACKEND_URL = url;
+            localStorage.setItem('backendUrl', BACKEND_URL);
+            adicionarLog(`[CONFIG] URL do backend atualizada para: ${BACKEND_URL}`);
+            document.getElementById('status').textContent = 'Reconectando ao backend...';
+            document.getElementById('status').classList.remove('connected');
+            buscarChavePublica();
+        }
+
+        function resumoBase64(base64) {
+            if (!base64) {
+                return '(vazio)';
+            }
+
+            const inicio = base64.slice(0, 80);
+            const fim = base64.slice(-30);
+            return `${inicio}...${fim} (len=${base64.length})`;
+        }
+
+        function calcularHashSha256Hex(textoClaro) {
+            const md = forge.md.sha256.create();
+            md.update(forge.util.encodeUtf8(textoClaro));
+            return md.digest().toHex();
+        }
+
+        function verificarAssinaturaDigital(textoClaro, assinaturaDigitalBase64) {
+            if (!assinaturaDigitalBase64 || typeof assinaturaDigitalBase64 !== 'string') {
+                return false;
+            }
+
+            const md = forge.md.sha256.create();
+            md.update(forge.util.encodeUtf8(textoClaro));
+            const assinaturaBytes = forge.util.decode64(assinaturaDigitalBase64);
+            return chavePublicaObjeto.verify(md.digest().bytes(), assinaturaBytes);
+        }
+
+        function criarPacoteHibrido(textoClaro) {
+            if (!chavePublicaObjeto) {
+                throw new Error('Chave pública ainda não carregada.');
+            }
+
+            const chaveSimetrica = forge.random.getBytesSync(32);
+            const iv = forge.random.getBytesSync(12);
+            const dadosUtf8 = forge.util.encodeUtf8(textoClaro);
+
+            const cipher = forge.cipher.createCipher('AES-GCM', chaveSimetrica);
+            cipher.start({ iv: iv, tagLength: 128 });
+            cipher.update(forge.util.createBuffer(dadosUtf8));
+
+            if (!cipher.finish()) {
+                throw new Error('Falha ao gerar cifragem AES-GCM.');
+            }
+
+            const dadosCriptografados = cipher.output.getBytes();
+            const tag = cipher.mode.tag.getBytes();
+
+            const chaveSimetricaCriptografada = chavePublicaObjeto.encrypt(chaveSimetrica, 'RSA-OAEP', {
+                md: forge.md.sha256.create(),
+                mgf1: { md: forge.md.sha256.create() }
+            });
+
+            return {
+                chaveSimetricaCriptografada: forge.util.encode64(chaveSimetricaCriptografada),
+                iv: forge.util.encode64(iv),
+                tag: forge.util.encode64(tag),
+                dadosCriptografados: forge.util.encode64(dadosCriptografados)
+            };
+        }
+
         // 1. Busca a chave pública no backend (PC1)
         async function buscarChavePublica() {
             try {
@@ -186,6 +327,7 @@
                 const dados = await resposta.json();
                 
                 chavePublicaPem = dados.publicKey;
+                chavePublicaObjeto = forge.pki.publicKeyFromPem(chavePublicaPem);
                 
                 const statusEl = document.getElementById('status');
                 statusEl.textContent = '✓ Conectado & Chave Pública Recebida';
@@ -194,16 +336,18 @@
 
                 // Mostra a chave pública COMPLETA no console visual da página
                 adicionarLog("🔑 [PASSO 1] Chave Pública recebida do PC1:\n" + chavePublicaPem);
+                adicionarLog(`[INFO] Backend em uso: ${BACKEND_URL}`);
                 
             } catch (erro) {
                 console.error("Erro ao buscar chave:", erro);
                 document.getElementById('status').textContent = 'Erro ao conectar com PC1';
+                document.getElementById('btnEnviar').disabled = true;
                 adicionarLog("[ERRO] Não foi possível conectar ao backend. O servidor do PC1 está rodando?");
             }
         }
 
-        // 2. Criptografa e envia a mensagem para o PC1
-        async function enviarMensagem() {
+        // 2. Criptografa e envia mensagem longa (híbrida) para o PC1
+        async function enviarMensagemHibrida() {
             const textoMensagem = document.getElementById('mensagem').value;
             
             if (!textoMensagem) {
@@ -212,33 +356,35 @@
             }
 
             try {
-                // Inicia o processo com o Forge
-                const publicKey = forge.pki.publicKeyFromPem(chavePublicaPem);
-                const mensagemBytes = forge.util.encodeUtf8(textoMensagem);
-                
-                const encrypted = publicKey.encrypt(mensagemBytes, 'RSA-OAEP', {
-                    md: forge.md.sha256.create(),
-                    mgf1: { md: forge.md.sha256.create() }
-                });
+                const pacote = criarPacoteHibrido(textoMensagem);
+                const hashOrigem = calcularHashSha256Hex(textoMensagem);
 
-                const mensagemBase64 = forge.util.encode64(encrypted);
-                
-                // Mostra o texto original e o cifrado COMPLETO no console visual da página
-                adicionarLog("🔒 [PASSO 2] Mensagem Original:\n" + textoMensagem);
-                adicionarLog("🔒 [PASSO 3] Texto Criptografado (Pronto para envio):\n" + mensagemBase64);
-                adicionarLog("📡 [REDE] Enviando dados cifrados para o PC1...");
+                adicionarLog("📄 [MENSAGEM - ORIGEM] Conteúdo sem criptografia:\n" + textoMensagem);
+                adicionarLog(`[🔍 MENSAGEM - ORIGEM] SHA-256: ${hashOrigem}`);
+                adicionarLog("📦 [MENSAGEM - REDE] Chave AES cifrada (RSA):\n" + resumoBase64(pacote.chaveSimetricaCriptografada));
+                adicionarLog("📦 [MENSAGEM - REDE] Dados cifrados (AES-GCM):\n" + resumoBase64(pacote.dadosCriptografados));
 
-                // Envia para o backend
-                const resposta = await fetch(`${BACKEND_URL}/mensagem`, {
+                const resposta = await fetch(`${BACKEND_URL}/mensagem-hibrida`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ mensagemCriptografada: mensagemBase64 })
+                    body: JSON.stringify({ pacote })
                 });
 
                 const resultado = await resposta.json();
 
                 if (resultado.sucesso) {
+                    const temAssinatura = typeof resultado.assinaturaDigital === 'string' && resultado.assinaturaDigital.length > 0;
+                    const temHash = typeof resultado.hashSha256 === 'string' && resultado.hashSha256.length > 0;
+                    const assinaturaValida = temAssinatura
+                        ? verificarAssinaturaDigital(resultado.mensagemOriginal, resultado.assinaturaDigital)
+                        : false;
+                    const hashConfere = temHash ? (hashOrigem === resultado.hashSha256) : false;
+
                     adicionarLog(`✅ [SUCESSO] Resposta do PC1: ${resultado.mensagem}`);
+                    adicionarLog("📥 [MENSAGEM - DESTINO] Conteúdo descriptografado no PC1:\n" + resultado.mensagemOriginal);
+                    adicionarLog(`[🔍 MENSAGEM - DESTINO] SHA-256: ${temHash ? resultado.hashSha256 : 'NÃO INFORMADO PELO BACKEND'}`);
+                    adicionarLog(`[🔐 MENSAGEM - ASSINATURA] Válida no PC2: ${temAssinatura ? (assinaturaValida ? 'SIM' : 'NÃO') : 'NÃO INFORMADA PELO BACKEND'}`);
+                    adicionarLog(`[✅ MENSAGEM - INTEGRIDADE] Hash origem == destino: ${temHash ? (hashConfere ? 'SIM' : 'NÃO') : 'NÃO FOI POSSÍVEL VALIDAR'}`);
                     document.getElementById('mensagem').value = ''; 
                 } else {
                     adicionarLog(`❌ [ERRO] PC1 retornou: ${resultado.erro}`);
@@ -251,6 +397,7 @@
         }
 
         // Inicia a busca pela chave assim que a página carrega
+        document.getElementById('backendUrl').value = BACKEND_URL;
         buscarChavePublica();
     </script>
 </body>
