@@ -19,13 +19,14 @@ const server = http.createServer((req, res) => {
   }
 
   fs.readFile(INDEX_PATH, (error, content) => {
-      let html = content.toString();
-      html = html.replace('__BACKEND_URL__', BACKEND_URL);
-    
     if (error) {
       res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('Erro ao carregar index.html');
       return;
     }
+
+    let html = content.toString();
+    html = html.replace('__BACKEND_URL__', BACKEND_URL);
 
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     res.end(html);
