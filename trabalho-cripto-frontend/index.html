@@ -204,6 +204,7 @@
         let chavePublicaPem = null;
 
         function adicionarLog(texto) {
+            +        const BACKEND_URL = '__BACKEND_URL__';
             const logArea = document.getElementById('logArea');
             logArea.style.display = 'block';
             logArea.innerHTML += texto + '\n\n';
